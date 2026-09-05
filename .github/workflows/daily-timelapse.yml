@@ -54,7 +54,7 @@ jobs:
           # Generate the video from the mixed list
           ffmpeg -r 10 -f concat -safe 0 -i frames.txt \
                  -c:v libx264 -crf 24 -preset fast -pix_fmt yuv420p \
-                 -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+                 -vf "scale='min(1920,iw)':-2" \
                  -y ../timelapse.mp4
                  
           cd ..
