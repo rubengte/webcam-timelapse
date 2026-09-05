@@ -15,6 +15,12 @@ jobs:
       fail-fast: false 
 
     steps:
+      # 1. Install FFmpeg so the runner can process the images
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
       - name: Process Timelapse for ${{ matrix.cam }}
         env:
           API_URL: ${{ secrets.TIMELAPSE_API_URL }} 
@@ -26,6 +32,7 @@ jobs:
           echo "Starting job for ${{ matrix.cam }} on $DATE"
           mkdir frames && cd frames
           
+          # Fetch the URLs from your PHP API
           URLS=$(curl -s "$API_URL?action=list&cam=${{ matrix.cam }}&date=$DATE&key=$KEY")
           
           if [[ "$URLS" != *"["* ]]; then
@@ -33,21 +40,30 @@ jobs:
             exit 0
           fi
           
+          # Download all frames
           echo "$URLS" | jq -r '.[]' | xargs -n 1 -P 5 wget -q
           
-          COUNT=$(ls -1 *.jpg 2>/dev/null | wc -l)
+          # 2. Check for both jpg and webp (matches your PHP script)
+          EXT="jpg"
+          if ls -1 *.webp 1> /dev/null 2>&1; then
+            EXT="webp"
+          fi
+          
+          COUNT=$(ls -1 *.$EXT 2>/dev/null | wc -l)
           if [ "$COUNT" -lt 10 ]; then
             echo "Only $COUNT images found. Skipping video generation."
             exit 0
           fi
           
-          ffmpeg -framerate 10 -pattern_type glob -i '*.jpg' \
+          # Generate the video
+          ffmpeg -framerate 10 -pattern_type glob -i "*.$EXT" \
                  -c:v libx264 -crf 24 -preset fast -pix_fmt yuv420p \
                  -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
                  -y ../timelapse.mp4
                  
           cd ..
           
+          # Verify and upload
           if [ -f timelapse.mp4 ]; then
             echo "Uploading timelapse.mp4..."
             curl -s -X POST -F "video=@timelapse.mp4" "$API_URL?action=upload&cam=${{ matrix.cam }}&date=$DATE&key=$KEY"
