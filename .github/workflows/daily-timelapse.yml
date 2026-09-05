@@ -15,7 +15,6 @@ jobs:
       fail-fast: false 
 
     steps:
-      # 1. Install FFmpeg so the runner can process the images
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -32,7 +31,6 @@ jobs:
           echo "Starting job for ${{ matrix.cam }} on $DATE"
           mkdir frames && cd frames
           
-          # Fetch the URLs from your PHP API
           URLS=$(curl -s "$API_URL?action=list&cam=${{ matrix.cam }}&date=$DATE&key=$KEY")
           
           if [[ "$URLS" != *"["* ]]; then
@@ -40,30 +38,27 @@ jobs:
             exit 0
           fi
           
-          # Download all frames
+          # Download all images
           echo "$URLS" | jq -r '.[]' | xargs -n 1 -P 5 wget -q
           
-          # 2. Check for both jpg and webp (matches your PHP script)
-          EXT="jpg"
-          if ls -1 *.webp 1> /dev/null 2>&1; then
-            EXT="webp"
-          fi
-          
-          COUNT=$(ls -1 *.$EXT 2>/dev/null | wc -l)
+          # Count total frames (both formats)
+          COUNT=$(ls -1 *.jpg *.webp 2>/dev/null | wc -l)
           if [ "$COUNT" -lt 10 ]; then
             echo "Only $COUNT images found. Skipping video generation."
             exit 0
           fi
           
-          # Generate the video
-          ffmpeg -framerate 10 -pattern_type glob -i "*.$EXT" \
+          # Create a chronological text file for FFmpeg containing all images
+          ls -1 *.jpg *.webp 2>/dev/null | sort | while read filename; do echo "file '$filename'" >> frames.txt; done
+          
+          # Generate the video from the mixed list
+          ffmpeg -r 10 -f concat -safe 0 -i frames.txt \
                  -c:v libx264 -crf 24 -preset fast -pix_fmt yuv420p \
                  -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
                  -y ../timelapse.mp4
                  
           cd ..
           
-          # Verify and upload
           if [ -f timelapse.mp4 ]; then
             echo "Uploading timelapse.mp4..."
             curl -s -X POST -F "video=@timelapse.mp4" "$API_URL?action=upload&cam=${{ matrix.cam }}&date=$DATE&key=$KEY"
