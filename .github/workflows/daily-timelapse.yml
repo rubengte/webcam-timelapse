@@ -9,6 +9,8 @@ on:
 jobs:
   encode-timelapse:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         cam: [portela, ribeira-brava, ponta-sol, pico-arieiro]
@@ -60,10 +62,16 @@ jobs:
           cd ..
           
           if [ -f timelapse.mp4 ]; then
-            echo "Uploading timelapse.mp4..."
-            curl -s -X POST -F "video=@timelapse.mp4" "$API_URL?action=upload&cam=${{ matrix.cam }}&date=$DATE&key=$KEY"
+            OUTPUT_FILE="${{ matrix.cam }}-$DATE.mp4"
+            mv timelapse.mp4 "$OUTPUT_FILE"
+
+            echo "Publishing $OUTPUT_FILE to GitHub Releases..."
+            export GH_TOKEN="${{ secrets.GITHUB_TOKEN }}"
             
-            echo "Triggering safe cleanup..."
+            gh release view "daily-archive" || gh release create "daily-archive" --title "Daily Webcam Timelapses" --notes "Automated daily webcam timelapse archive"
+            gh release upload "daily-archive" "$OUTPUT_FILE" --clobber
+
+            echo "Triggering safe cleanup on server..."
             CLEANUP_RESPONSE=$(curl -s "$API_URL?action=cleanup&cam=${{ matrix.cam }}&date=$DATE&key=$KEY")
             echo "Server Response: $CLEANUP_RESPONSE"
           else
