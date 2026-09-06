@@ -2,8 +2,8 @@ name: Nightly Webcam Timelapse
 
 on:
   schedule:
-    # Runs at 22:02 UTC (23:02 Atlantic/Madeira Time) to bypass github higher traffic hours
-    - cron: '2 22 * * *'
+    # Runs at 00:02 UTC (01:02 AM Atlantic/Madeira Summer Time) converting yesterday's images into mp4 video
+    - cron: '2 0 * * *'
   workflow_dispatch:
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
           KEY: ${{ secrets.TIMELAPSE_KEY }}
         run: |
           export TZ="Atlantic/Madeira"
-          DATE=$(date +'%Y-%m-%d')
+          DATE=$(date -d "yesterday" +'%Y-%m-%d')
           
           echo "Starting job for ${{ matrix.cam }} on $DATE"
           mkdir frames && cd frames
@@ -70,3 +70,12 @@ jobs:
             echo "Error: MP4 file was not created by FFmpeg."
             exit 1
           fi
+
+  keepalive-job:
+    name: Prevent Workflow Pause
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gautamkrishnar/keepalive-workflow@v2
