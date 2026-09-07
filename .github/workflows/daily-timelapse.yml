@@ -80,8 +80,8 @@ jobs:
           else
             echo "Error: MP4 file was not created by FFmpeg."
             exit 1
-          fi         
-   
+          fi          
+  
   keepalive-job:
     name: Prevent Workflow Pause
     runs-on: ubuntu-latest
@@ -90,6 +90,25 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Keepalive Workflow
-        uses: gautamkrishnar/keepalive-workflow@v2
+      - name: Auto-Commit If Inactive
+        run: |
+          LAST_COMMIT_TS=$(git log -1 --format=%ct)
+          NOW_TS=$(date +%s)
+          DAYS_INACTIVE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
+
+          echo "Days since last commit: $DAYS_INACTIVE"
+
+          if [ "$DAYS_INACTIVE" -ge 45 ]; then
+            echo "Inactive for 45+ days. Creating keepalive commit..."
+            date > .keepalive
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .keepalive
+            git commit -m "keepalive: automated commit to reset 60-day cron timer [skip ci]"
+            git push
+          else
+            echo "Repository updated within the last 45 days. Skipping commit."
+          fi     
