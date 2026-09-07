@@ -1,4 +1,4 @@
-name: Monthly Webcam Timelapse Aggregator 
+name: Monthly Webcam Timelapse Aggregator
 
 on:
   schedule:
