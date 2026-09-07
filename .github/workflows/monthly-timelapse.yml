@@ -1,0 +1,72 @@
+name: Monthly Webcam Timelapse Aggregator
+
+on:
+  schedule:
+    # Runs at 02:00 UTC on the 1st of every month (e.g., Oct 1 processes all of Sept)
+    - cron: '0 2 1 * *'
+  workflow_dispatch:
+
+jobs:
+  aggregate-monthly:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        cam: [portela, ribeira-brava, ponta-sol, pico-arieiro]
+      fail-fast: false
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Process Monthly Video for ${{ matrix.cam }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export TZ="Atlantic/Madeira"
+          # Target previous month (e.g., "2026-08")
+          TARGET_MONTH=$(date -d "last month" +'%Y-%m')
+          echo "Processing monthly timelapse for ${{ matrix.cam }} ($TARGET_MONTH)..."
+
+          mkdir work_dir && cd work_dir
+
+          # Download all daily MP4 files for this camera and target month
+          gh release download "daily-archive" --pattern "${{ matrix.cam }}-${TARGET_MONTH}-*.mp4" || true
+
+          FILE_COUNT=$(ls -1 *.mp4 2>/dev/null | wc -l)
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "No daily MP4 files found for $TARGET_MONTH. Skipping."
+            exit 0
+          fi
+
+          echo "Found $FILE_COUNT daily MP4 files. Concatenating..."
+
+          # Build chronological list for FFmpeg
+          ls -1 *.mp4 | sort | while read filename; do echo "file '$filename'" >> concat.txt; done
+
+          MONTHLY_FILE="${{ matrix.cam }}-${TARGET_MONTH}.mp4"
+
+          # Fast stream copy merge (no re-encoding needed)
+          ffmpeg -f concat -safe 0 -i concat.txt -c copy "../$MONTHLY_FILE"
+          cd ..
+
+          if [ -f "$MONTHLY_FILE" ]; then
+            echo "Publishing $MONTHLY_FILE to monthly-archive release..."
+            gh release view "monthly-archive" || gh release create "monthly-archive" --title "Monthly Webcam Timelapses" --notes "Automated monthly webcam timelapse archives"
+            gh release upload "monthly-archive" "$MONTHLY_FILE" --clobber
+
+            echo "Cleaning up daily MP4 release assets from daily-archive..."
+            cat work_dir/concat.txt | sed "s/file '//;s/'//" | while read asset_file; do
+              echo "Deleting daily asset: $asset_file"
+              gh release delete-asset "daily-archive" "$asset_file" --yes || true
+            done
+          else
+            echo "Error: Monthly MP4 creation failed."
+            exit 1
+          fi
