@@ -17,6 +17,9 @@ jobs:
       fail-fast: false 
 
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -87,3 +90,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: gautamkrishnar/keepalive-workflow@v2
+        with:
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
