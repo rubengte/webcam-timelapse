@@ -13,7 +13,7 @@ jobs:
       contents: write
     strategy:
       matrix:
-        cam: [portela, ribeira-brava, ponta-sol, pico-arieiro, ponta-delgada, boaventura]
+        cam: [portela, ribeira-brava, ponta-sol, pico-arieiro, ponta-delgada, boaventura, golden-hour-north, golden-hour-south]
       fail-fast: false 
 
     steps:
