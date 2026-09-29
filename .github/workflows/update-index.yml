@@ -1,0 +1,35 @@
+name: Update Video Index
+
+on:
+  workflow_run:
+    workflows: ["Nightly Webcam Timelapse", "Monthly Webcam Timelapse Aggregator"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: update-index
+
+jobs:
+  update-index:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build and commit index.json
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          list() {
+            ID=$(gh api "repos/${{ github.repository }}/releases/tags/$1" --jq .id 2>/dev/null) || { echo "[]"; return; }
+            gh api --paginate "repos/${{ github.repository }}/releases/$ID/assets?per_page=100" --jq '.[].name' | grep '\.mp4$' | jq -R . | jq -s .
+          }
+          jq -n --argjson d "$(list daily-archive)" --argjson m "$(list monthly-archive)" \
+            '{"daily-archive":$d,"monthly-archive":$m}' > index.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.json
+          git diff --cached --quiet && echo "Index unchanged." || (git commit -m "index: update video list [skip ci]" && git push)
